@@ -46,10 +46,10 @@ LINKONLYOBJECTS =
 all: $(TARGET) mega8motor.hex mega8motor.eep mega8motor.lss size
 
 ## Compile
-main.o: ../main.c
+main.o: ./main.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
-twi-slave.o: ../twi-slave.c
+twi-slave.o: ./twi-slave.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 ##Link
