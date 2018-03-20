@@ -243,10 +243,14 @@ ISR(TWI_vect)
     // A STOP condition or repeated START condition has been received while still addressed as Slave
     case TWI_SRX_STOP_RESTART:    
         // Put TWI Transceiver in passive mode.
-        TWCR = (1<<TWEN)|                          // Enable TWI-interface and release TWI pins
-               (0<<TWIE)|(0<<TWINT)|               // Disable Interupt
-               (0<<TWEA)|(0<<TWSTA)|(0<<TWSTO)|    // Do not acknowledge on any new requests.
-               (0<<TWWC);
+        if(TWI_bufPtr >= 3) {
+            TWCR = (1<<TWEN)|                          // Enable TWI-interface and release TWI pins
+                   (0<<TWIE)|(0<<TWINT)|               // Disable Interupt
+                   (0<<TWEA)|(0<<TWSTA)|(0<<TWSTO)|    // Do not acknowledge on any new requests.
+                   (0<<TWWC);
+        } else {
+            TWCR = (1<<TWEN)|(1<<TWIE)|(1<<TWINT)|(1<<TWEA);
+        }
         break;
         
     // Previously addressed with own SLA+W; data has been received; NOT ACK has been returned
