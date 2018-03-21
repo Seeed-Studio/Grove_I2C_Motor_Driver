@@ -174,8 +174,8 @@ ISR(TWI_vect)
     
         // Data byte in TWDR has been transmitted; ACK has been received
         case TWI_STX_DATA_ACK:
-            TWDR = TWI_buf[TWI_bufPtr++];
-            
+            // TWDR = TWI_buf[TWI_bufPtr++];
+            TWDR = 0x02;  // To-DO: Why TWI_txBuf didn't store user data
             // TWI Interface enabled
             // Enable TWI Interupt and clear the flag to send byte
             TWCR = (1<<TWEN) | (1<<TWIE)|(1<<TWINT)| (1<<TWEA)|(0<<TWSTA)|(0<<TWSTO)| (0<<TWWC);
@@ -196,14 +196,11 @@ ISR(TWI_vect)
                 // Store TWI State as errormessage.
                 TWI_state = TWSR;      
             }
-            
-            // Put TWI Transceiver in passive mode.
-            // Enable TWI-interface and release TWI pins
-            TWCR = (1<<TWEN)|
-                   (0<<TWIE)|(0<<TWINT)|                // Disable Interupt
-                   (0<<TWEA)|(0<<TWSTA)|(0<<TWSTO)|     // Do not acknowledge on any new requests.
-                   (0<<TWWC);
-           break;     
+
+        // Last data byte in TWDR has been transmitted (TWEA = 0); ACK has been received
+        case TWI_STX_DATA_ACK_LAST_BYTE:
+            TWCR = (1<<TWEN)|(1<<TWIE)|(1<<TWINT)|(1<<TWEA); // ack
+            break;     
            
         // General call address has been received; ACK has been returned
         case TWI_SRX_GEN_ACK:
@@ -257,8 +254,6 @@ ISR(TWI_vect)
     case TWI_SRX_ADR_DATA_NACK:
     // Previously addressed with general call; data has been received; NOT ACK has been returned
     case TWI_SRX_GEN_DATA_NACK:
-    // Last data byte in TWDR has been transmitted (TWEA = 0); ACK has been received
-    case TWI_STX_DATA_ACK_LAST_BYTE:
     // Bus error due to an illegal START or STOP condition
     case TWI_BUS_ERROR:
     default:
