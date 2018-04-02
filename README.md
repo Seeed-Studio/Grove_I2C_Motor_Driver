@@ -1,11 +1,13 @@
 Grove - I2C Motor Driver
 ------------------------
 
+A library has been made up at a [new repository](https://github.com/Seeed-Studio/Grove_I2C_Motor_Driver_v1_3), please refer to it.
+
 This is an Arduino example for [Grove - I2C Motor Driver](http://www.seeedstudio.com/depot/grove-i2c-motor-driver-p-907.html?cPath=91_92)
 
-[![Grove - I2C Moto Driver](http://www.seeedstudio.com/depot/bmz_cache/a/af1f380a7d22dd28ef29d1af21475b38.image.114x85.jpg)](http://www.seeedstudio.com/depot/grove-i2c-motor-driver-p-907.html?cPath=91_92)
+[![Grove - I2C Moto Driver](https://statics3.seeedstudio.com/images/product/12Cmotor.jpg)](http://www.seeedstudio.com/depot/grove-i2c-motor-driver-p-907.html?cPath=91_92)
 
-For more information, please refer to [wiki page](http://garden.seeedstudio.com/index.php?title=Twig_-_I2C_Color_Sensor_v0.9b).
+For more information, please refer to [wiki page](http://wiki.seeedstudio.com/Grove-I2C_Motor_Driver_V1.3/).
 
 ----
 
