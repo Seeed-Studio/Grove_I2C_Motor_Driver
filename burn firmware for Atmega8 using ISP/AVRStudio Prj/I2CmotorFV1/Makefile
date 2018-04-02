@@ -72,7 +72,7 @@ size: ${TARGET}
 ## Clean target
 .PHONY: clean
 clean:
-	-rm -rf $(OBJECTS) mega8motor.elf dep/* mega8motor.hex mega8motor.eep mega8motor.lss mega8motor.map
+	-rm -rf $(OBJECTS) mega8motor.elf dep mega8motor.hex mega8motor.eep mega8motor.lss mega8motor.map NUL mega8i2cmotor.aws
 
 
 ## Other dependencies
