@@ -1,11 +1,12 @@
 #include <avr/io.h>
 #include <stdio.h>
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
 #include <stdlib.h>
 #include <util/delay.h>
 
-
 #include "twi-slave.h"
+
 
 #define MOTOR_DDR  DDRD
 #define MOTOR_PORT PORTD
@@ -165,7 +166,7 @@ void MotorAddSet()
 int main(void)
 {
 	unsigned char messageBuf[4];
-  	unsigned char pinBuf;
+  unsigned char pinBuf;
 
 	pin_init();
 	// 64 prescaler 
@@ -179,8 +180,12 @@ int main(void)
 		
 	TWI_Start_Transceiver();
 
+	wdt_enable(WDTO_15MS); // Enable WDT with 1 second timeout
+
 	while(1)
 	{
+		
+	 wdt_reset(); // Reset WDT while PB4 are pulled low
 
 	 if (ISRhappened==1)
 	 {
