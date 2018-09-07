@@ -7,6 +7,21 @@ This is an Arduino example for [Grove - I2C Motor Driver](http://www.seeedstudio
 
 [![Grove - I2C Moto Driver](https://statics3.seeedstudio.com/images/product/12Cmotor.jpg)](http://www.seeedstudio.com/depot/grove-i2c-motor-driver-p-907.html?cPath=91_92)
 
+### Firmware updated to fix i2cdetect block on raspberry pi.
+
+Users who got this motor driver can use AVR ISP programmer mkII to burn the new firmware at 
+```
+./burn firmware for Atmega8 using ISP/motor driver firmware/mega8motor_v3.hex.
+```
+Tools:
+
+- AVR ISP programmer mkII
+- avrdude
+
+Upload firmware Command:
+```
+avrdude -p m8 -c avrisp2 -P usb -U flash:w:mega8motor_v3.hex
+```
 For more information, please refer to [wiki page](http://wiki.seeedstudio.com/Grove-I2C_Motor_Driver_V1.3/).
 
 ----
