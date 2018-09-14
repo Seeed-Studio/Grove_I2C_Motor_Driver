@@ -46,6 +46,7 @@ unsigned char TWI_Get_State_Info( void );
 void TWI_Start_Transceiver_With_Data( unsigned char * , unsigned char );
 void TWI_Start_Transceiver( void );
 unsigned char TWI_Get_Data_From_Transceiver( unsigned char *, unsigned char );
+int            TWI_Get_Data_Unblock(unsigned char* msg, unsigned size);
 
 /****************************************************************************
   Bit and byte definitions
@@ -111,6 +112,7 @@ unsigned char TWI_Get_Data_From_Transceiver( unsigned char *, unsigned char );
 #define TWI_NO_STATE               0xF8  // No relevant state information available; TWINT = ?0?
 #define TWI_BUS_ERROR              0x00  // Bus error due to an illegal START or STOP condition
 
+int led_debug(int led);
 
 #endif /* TWI_SLAVE_H */
 
