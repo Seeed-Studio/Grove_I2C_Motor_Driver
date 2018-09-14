@@ -40,13 +40,28 @@ extern union TWI_statusReg TWI_statusReg;
 /****************************************************************************
   Function definitions
 ****************************************************************************/
+#define WEAK_DECL __attribute__((__weak__))
+
 void TWI_Slave_Initialise( unsigned char );
 unsigned char TWI_Transceiver_Busy( void );
 unsigned char TWI_Get_State_Info( void );
 void TWI_Start_Transceiver_With_Data( unsigned char * , unsigned char );
 void TWI_Start_Transceiver( void );
 unsigned char TWI_Get_Data_From_Transceiver( unsigned char *, unsigned char );
-int            TWI_Get_Data_Unblock(unsigned char* msg, unsigned size);
+int            TWI_Get_Data_With_Busy(unsigned char* msg, unsigned size);
+
+// Interrupt driven
+int TWI_Recv_Data(unsigned char* msg, unsigned size);
+int TWI_Send_Data(unsigned char *msg, unsigned size);
+/*
+ * implement by application.
+ */
+int TWI_Recv_Callback(unsigned char* buff, int bytes);
+int TWI_Request_Callback(int dummy);
+
+int led_debug(int led);
+
+
 
 /****************************************************************************
   Bit and byte definitions
@@ -111,8 +126,6 @@ int            TWI_Get_Data_Unblock(unsigned char* msg, unsigned size);
 // TWI Miscellaneous status codes
 #define TWI_NO_STATE               0xF8  // No relevant state information available; TWINT = ?0?
 #define TWI_BUS_ERROR              0x00  // Bus error due to an illegal START or STOP condition
-
-int led_debug(int led);
 
 #endif /* TWI_SLAVE_H */
 

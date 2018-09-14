@@ -169,11 +169,12 @@ unsigned char TWI_Get_Data_From_Transceiver( unsigned char *msg, unsigned char m
     return TWI_statusReg.lastTransOK;
 }
 
+
 /**
- * try to full Fill the msg buffer
+ * Try to full fill the msg buffer
  * and discard all the rest data in TWI buffer
  */
-int TWI_Get_Data_Unblock(unsigned char* msg, unsigned size) {
+int TWI_Get_Data_With_Busy(unsigned char* msg, unsigned size) {
     unsigned i;
 
     // Wait until TWI is ready for next transmission.
@@ -196,6 +197,42 @@ int TWI_Get_Data_Unblock(unsigned char* msg, unsigned size) {
     TWI_recvBytes = 0;
 
     return size;
+}
+
+/**
+ * Fill recving buffer
+ */
+int TWI_Recv_Data(unsigned char* msg, unsigned size) {
+    int i;
+
+    for (i = 0; i < size; i++) {
+        msg[i] = TWI_buf[i];
+    }
+    return 0;
+}
+
+/**
+ * Fill sending buffer
+ */
+int TWI_Send_Data(unsigned char *msg, unsigned size) {
+    int i;
+
+    // Number of data to transmit.
+    TWI_msgSize = size;
+
+    // Copy data that may be transmitted if the TWI Master requests data.
+    for (i = 0; i < size; i++) {
+        TWI_buf[i] = msg[i];
+    }
+    return 0;
+}
+
+WEAK_DECL int TWI_Recv_Callback(unsigned char* buff, int bytes) {
+    return 0;
+}
+
+WEAK_DECL int TWI_Request_Callback(int dummy) {
+    return 0;
 }
 
 /**
@@ -286,15 +323,21 @@ ISR(TWI_vect)
     case TWI_SRX_STOP_RESTART:
         // Put TWI Transceiver in passive mode.
         TWCR = (1<<TWEN) |                            // Enable TWI-interface and release TWI pins
-               (0<<TWIE) | (0<<TWINT) |               // Disable Interupt
-               (0<<TWEA) | (0<<TWSTA) | (0<<TWSTO) |  // Do not acknowledge on any new requests.
+               (1<<TWIE) | (1<<TWINT) |               // Disable Interupt
+               (1<<TWEA) | (0<<TWSTA) | (0<<TWSTO) |  // Do not acknowledge on any new requests.
                (0<<TWWC);
-        if (TWI_mode != TWI_MODE_NONE) {
-            if (TWI_mode == TWI_MODE_RECV) {
-                TWI_recvBytes = TWI_bufPtr;
+        if (TWI_mode == TWI_MODE_RECV) {
+            TWI_recvBytes = TWI_bufPtr;
+            if (TWI_recvBytes) {
+                TWI_Recv_Callback(TWI_buf, TWI_recvBytes);
             }
-            TWI_mode = TWI_MODE_NONE;
+        } else if (TWI_mode == TWI_MODE_SEND) {
+            ;
         }
+        TWI_mode = TWI_MODE_NONE;
+        TWI_statusReg.all = 0;
+        TWI_state         = TWI_NO_STATE ;
+        TWI_recvBytes     = 0;
         break;
 
     // Previously addressed with own SLA+W; data has been received; NOT ACK has been returned
@@ -306,10 +349,9 @@ ISR(TWI_vect)
     default:
         // Store TWI State as errormessage, operation also clears the Success bit.
         TWI_state = TWSR;
-
         TWCR = (1<<TWEN)|                          // Enable TWI-interface and release TWI pins
-               (0<<TWIE)|(0<<TWINT)|               // Disable Interupt
-               (0<<TWEA)|(0<<TWSTA)|               // Do not acknowledge on any new requests.
+               (1<<TWIE)|(0<<TWINT)|               // Disable Interupt
+               (1<<TWEA)|(0<<TWSTA)|               // Acknowledge on any new requests.
                (0<<TWWC)|
                (1<<TWSTO);                         // Recover from bus_error status
         TWAR = TWI_Address;                        // Recover it's device address.
