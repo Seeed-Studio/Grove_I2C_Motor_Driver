@@ -21,23 +21,23 @@
 */
 #include <Wire.h>
 
+#define Nothing                   0x00
 #define MotorSpeedSet             0x82
 #define PWMFrequenceSet           0x84
 #define DirectionSet              0xaa
 #define MotorSetA                 0xa1
 #define MotorSetB                 0xa5
-#define Nothing                   0x01
 #define EnableStepper             0x1a
-#define UnenableStepper           0x1b
-#define Stepernu                  0x1c
+#define DisableStepper            0x1b
+#define RunStepper                0x1c
 #define I2CMotorDriverAdd         0x0f   // Set the address of the I2CMotorDriver
 // set the steps you want, if 255, the stepper will rotate continuely;
-void SteperStepset(unsigned char stepnu)
+void SteperStepset(unsigned steps)
 {
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
-  Wire.write(Stepernu);          // Send the stepernu command 
-  Wire.write(stepnu);            // send the steps
-  Wire.write(Nothing);           // send nothing   
+  Wire.write(RunStepper);          // Send the RunStepper command 
+  Wire.write((unsigned char)(steps % 0x100));            // send the steps
+  Wire.write((unsigned char)(steps / 0x100));           // send nothing   
   Wire.endTransmission();        // stop transmitting 
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -60,7 +60,7 @@ void StepperMotorEnable(unsigned char Direction, unsigned char motorspeed)
 void StepperMotorUnenable()
 {
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
-  Wire.write(UnenableStepper);        // set unenable commmand
+  Wire.write(DisableStepper);        // set unenable commmand
   Wire.write(Nothing);              
   Wire.write(Nothing);              
   Wire.endTransmission();    // stop transmitting 
@@ -103,20 +103,20 @@ void MotorDriectionAndSpeedSet(unsigned char Direction,unsigned char MotorSpeedA
 void stepperrun()
 {
  Serial.println("sent command to + direction, very fast");
- SteperStepset(255);
+ SteperStepset(2047);
  StepperMotorEnable(1, 1);// ennable the i2c motor driver a stepper. 
-  delay(5000);
+  delay(8000);
   Serial.println("sent command to - direction, slow");
   SteperStepset(255);
   StepperMotorEnable(0, 20);
-  delay(5000);
+  delay(8000);
    Serial.println("sent command to - direction, fast");
-  StepperMotorEnable(0, 2);// ennable the i2c motor driver a stepper. 
-  delay(5000);
+  StepperMotorEnable(0, 3);// ennable the i2c motor driver a stepper. 
+  delay(8000);
  Serial.println("sent command to + direction,100 steps, fast");
  SteperStepset(100);
   StepperMotorEnable(1,5);
- delay(3000);
+ delay(8000);
 
  Serial.println("sent command to shut down the stepper");
  StepperMotorUnenable();
@@ -144,27 +144,26 @@ void loop()  {
     Serial.println("sent DC speed 100");
     MotorSpeedSetAB(100,100);//defines the speed of motor 1 and motor 2;
     delay(10); //this delay needed
-  MotorDirectionSet(0b1010);  //"0b1010" defines the output polarity, "10" means the M+ is "positive" while the M- is "negtive"
+    MotorDirectionSet(0b1010);  //"0b1010" defines the output polarity, "10" means the M+ is "positive" while the M- is "negtive"
                                   // make sure M+ and M- is different polatity when driving DC motors.
-   delay(5000);  
+    delay(5000);
     MotorDirectionSet(0b0101);  //0b0101  Rotating in the opposite direction
-    delay(5000); 
-     Serial.println("sent DC speed 50");
-     MotorSpeedSetAB(50,50);//defines the speed of motor 1 and motor 2;
+    delay(5000);
+    Serial.println("sent DC speed 50");
+    MotorSpeedSetAB(50,50);//defines the speed of motor 1 and motor 2;
     delay(10); //this delay needed
-  MotorDirectionSet(0b1010);  //"0b1010" defines the output polarity, "10" means the M+ is "positive" while the M- is "negtive"
+    MotorDirectionSet(0b1010);  //"0b1010" defines the output polarity, "10" means the M+ is "positive" while the M- is "negtive"
                                   // make sure M+ and M- is different polatity when driving DC motors.
-   delay(5000); 
+    delay(5000);
     MotorDirectionSet(0b0101);  //0b0101  Rotating in the opposite direction
-    delay(5000); 
+    delay(5000);
     Serial.println("sent DC speed 20");
-     MotorSpeedSetAB(20,20);//defines the speed of motor 1 and motor 2;
+    MotorSpeedSetAB(20,20);//defines the speed of motor 1 and motor 2;
     delay(10); //this delay needed
-  MotorDirectionSet(0b1010);  //"0b1010" defines the output polarity, "10" means the M+ is "positive" while the M- is "negtive"
+    MotorDirectionSet(0b1010);  //"0b1010" defines the output polarity, "10" means the M+ is "positive" while the M- is "negtive"
                                   // make sure M+ and M- is different polatity when driving DC motors.
-   delay(5000); 
+    delay(5000);
     MotorDirectionSet(0b0101);  //0b0101  Rotating in the opposite direction
-    delay(5000); 
+    delay(5000);
   }
-  
 }

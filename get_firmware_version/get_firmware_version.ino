@@ -21,12 +21,12 @@
 */
 #include <Wire.h>
 
+#define CmdGetVer 0x01
 #define MotorSpeedSet 0x82
 #define PWMFrequenceSet 0x84
 #define DirectionSet 0xaa
 #define MotorSetA 0xa1
 #define MotorSetB 0xa5
-#define Nothing 0x01
 #define EnableStepper 0x1a
 #define UnenableStepper 0x1b
 #define Stepernu 0x1c
@@ -37,7 +37,7 @@ void SteperStepset(unsigned char stepnu)
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
   Wire.write(Stepernu);                      // Send the stepernu command
   Wire.write(stepnu);                        // send the steps
-  Wire.write(Nothing);                       // send nothing
+  Wire.write(0);                             // send 0
   Wire.endTransmission();                    // stop transmitting
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -61,8 +61,8 @@ void StepperMotorUnenable()
 {
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
   Wire.write(UnenableStepper);               // set unenable commmand
-  Wire.write(Nothing);
-  Wire.write(Nothing);
+  Wire.write(0);
+  Wire.write(0);
   Wire.endTransmission(); // stop transmitting
 }
 //////////////////////////////////////////////////////////////////////
@@ -86,7 +86,7 @@ void MotorPWMFrequenceSet(unsigned char Frequence)
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
   Wire.write(PWMFrequenceSet);               // set frequence header
   Wire.write(Frequence);                     //  send frequence
-  Wire.write(Nothing);                       //  need to send this byte as the third byte(no meaning)
+  Wire.write(0);                             //  need to send this byte as the third byte(no meaning)
   Wire.endTransmission();                    // stop transmitting
 }
 //set the direction of DC motor.
@@ -95,7 +95,7 @@ void MotorDirectionSet(unsigned char Direction)
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
   Wire.write(DirectionSet);                  // Direction control header
   Wire.write(Direction);                     // send direction control information
-  Wire.write(Nothing);                       // need to send this byte as the third byte(no meaning)
+  Wire.write(0);                             // need to send this byte as the third byte(no meaning)
   Wire.endTransmission();                    // stop transmitting
 }
 
@@ -107,7 +107,11 @@ void MotorDriectionAndSpeedSet(unsigned char Direction, unsigned char MotorSpeed
 
 uint8_t MotorDrv_get_version()
 {
-  Wire.requestFrom(I2CMotorDriverAdd, 1); // stop transmitting
+  Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
+  Wire.write(CmdGetVer);                     // Get  firmware Version
+  Wire.endTransmission();                    // stop transmitting
+
+  Wire.requestFrom(I2CMotorDriverAdd, 1);    // stop transmitting
   char version = Wire.read();
 
   return version;
