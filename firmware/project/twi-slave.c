@@ -33,7 +33,6 @@ enum {
 };
 static unsigned char TWI_mode = TWI_MODE_NONE;
 static unsigned char TWI_recvBytes = 0;
-static unsigned char TWI_Address;
 
 
 /**
@@ -48,7 +47,6 @@ static unsigned char TWI_Address;
 void TWI_Slave_Initialise( unsigned char TWI_ownAddress )
 {
   TWAR = TWI_ownAddress;                            // Set own TWI slave address. Accept TWI General Calls.
-  TWI_Address = TWI_ownAddress;
   TWDR = 0xFF;                                      // Default content = SDA released.
   TWCR = (1<<TWEN)|                                 // Enable TWI-interface and release TWI pins.
          (0<<TWIE)|(0<<TWINT)|                      // Disable TWI Interupt.
@@ -245,7 +243,8 @@ ISR(TWI_vect)
 {
     static unsigned char TWI_bufPtr;
 
-    switch (TWSR) {
+    TWI_state = TWSR;
+    switch (TWI_state) {
         // Own SLA+R has been received; ACK has been returned
         case TWI_STX_ADR_ACK:
             // Set buffer pointer to first data location
@@ -300,7 +299,7 @@ ISR(TWI_vect)
             // Enable TWI Interupt and clear the flag to send byte
             // Expect ACK on this transmission
             //
-            TWCR = (1<<TWEN)| (1<<TWIE)|(1<<TWINT)| (1<<TWEA)|(0<<TWSTA)|(0<<TWSTO)| (0<<TWWC);
+            TWCR = (1<<TWEN) | (1<<TWIE) | (1<<TWINT) | (1<<TWEA);
         break;
 
     // Previously addressed with own SLA+W; data has been received; ACK has been returned
@@ -348,12 +347,15 @@ ISR(TWI_vect)
     case TWI_BUS_ERROR:
     default:
         // Store TWI State as errormessage, operation also clears the Success bit.
-        TWI_state = TWSR;
         TWCR = (1<<TWEN)|                          // Enable TWI-interface and release TWI pins
                (1<<TWIE)|(0<<TWINT)|               // Disable Interupt
                (1<<TWEA)|(0<<TWSTA)|               // Acknowledge on any new requests.
                (0<<TWWC)|
                (1<<TWSTO);                         // Recover from bus_error status
-        TWAR = TWI_Address;                        // Recover it's device address.
+        // wait for stop condition to be exectued on bus
+        // TWINT is not set after a stop condition!
+        while(TWCR & _BV(TWSTO)){
+            continue;
+        }
     }
 }
