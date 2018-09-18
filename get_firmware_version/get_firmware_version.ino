@@ -107,9 +107,12 @@ void MotorDriectionAndSpeedSet(unsigned char Direction, unsigned char MotorSpeed
 
 uint8_t MotorDrv_get_version()
 {
+  // version 4, issue a GetVer command
   Wire.beginTransmission(I2CMotorDriverAdd); // transmit to device I2CMotorDriverAdd
   Wire.write(CmdGetVer);                     // Get  firmware Version
   Wire.endTransmission();                    // stop transmitting
+  // version 4, small delay to let I2C-Motor-Driver firmware ready
+  delay(20);
 
   Wire.requestFrom(I2CMotorDriverAdd, 1);    // stop transmitting
   char version = Wire.read();
@@ -123,7 +126,7 @@ void setup()
   delayMicroseconds(10000);
   Serial.begin(9600);
   Serial.println("setup begin");
-  
+
   char version = MotorDrv_get_version();
   Serial.print("Firmware version: ");
   Serial.println(version, DEC);
