@@ -107,7 +107,9 @@ uint8_t step_dir = _STEP_DIR_CLKWISE;
 uint16_t step_interval = 0;
 // Compatibility, step-timer ticks to generate a pulse
 uint8_t step_speed = 100UL;
-volatile uint16_t pulse_cnt = 255UL;
+// User operation enable/disable, not the real state.
+uint8_t step_enabled = FALSE;
+volatile uint16_t pulse_cnt = 0UL;
 
 // stepper sequences
 #define _MAX_SEQ_SZ	128UL
@@ -304,14 +306,14 @@ void steptimer_callback(void) {
 #else
 ISR(TIMER2_COMP_vect) {
 #endif
+	if (pulse_cnt == 0) {
+		return;
+	}
+
 	// ***************************************
 	// ****** Interrupt nesting allowed ******
 	// ***************************************
 	sei();
-
-	if (pulse_cnt == 0) {
-		return;
-	}
 
 	// control the pulse speed by isr_counter
 	if (++stp_isr_counter < step_speed) {
@@ -561,16 +563,18 @@ int main(void) {
 	sei();
 
 	while (1) {
-		// none-8bit values (pulse_cnt) show be protected
-		cli();
-		pulse_zero = pulse_cnt == 0;
-		sei();
+		if (step_enabled) {
+			// none-8bit values (pulse_cnt) show be protected
+			cli();
+			pulse_zero = pulse_cnt == 0;
+			sei();
 
-		if (pulse_zero) {
-			stp_isr_counter = 0;
+			if (pulse_zero) {
+				stp_isr_counter = 0;
 
-			// Disable Timer2 Compare interrupt
-			TIMSK &= ~(1 << OCIE2);
+				// Disable Timer2 Compare interrupt
+				TIMSK &= ~(1 << OCIE2);
+			}
 		}
 
 		wdt_reset();	// Reset WDT
@@ -633,16 +637,25 @@ int main(void) {
 
 			steptimer_open(step_cycles);
 			pwm_set_duty(255, 255);
+			step_enabled = TRUE;
 			break;
 
 		// disable the stepper
 		case REG_STP_DIS:
+			step_enabled = FALSE;
 			steptimer_close();
 			break;
 
 		// set the steps count
 		case REG_STP_RUN:
+			cli();
 			memcpy((uint8_t*)&pulse_cnt, &rx_buff[1], sizeof pulse_cnt);
+			// aim to no order dependency between STP_RUN and STP_EN
+			if (step_enabled && pulse_cnt != 0) {
+				// Enable Timer2 Compare interrupt
+				TIMSK |= 1 << (OCIE2);
+			}
+			sei();
 			break;
 
 		// set the step interval
