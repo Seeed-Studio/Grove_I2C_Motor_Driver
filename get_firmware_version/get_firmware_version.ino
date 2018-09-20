@@ -21,7 +21,9 @@
 */
 #include <Wire.h>
 
-#define CmdGetVer 0x01
+#define CmdGetPid 0x00
+#define CmdGetVid 0x01
+#define CmdGetVer 0x02
 #define MotorSpeedSet 0x82
 #define PWMFrequenceSet 0x84
 #define DirectionSet 0xaa

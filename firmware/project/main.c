@@ -1,9 +1,9 @@
 /*
  * Name: m8_motor.c
  *   firmware of I2C-Motor-Driver to driver DC motor & stepper motor.
- * 
+ *
  * v4, 20:37 2018/9/11
- *   I2C using interrupt driven flow.
+ *   I2C flow using interrupt driven.
  *
  * Author: turmary <turmary@126.com>
  * Copyright (c) 2018 Seeed Corporation.
@@ -57,7 +57,9 @@
 //                       Internal Calibrated RC Oscillator Operation Modes
 // F_CPU       = 8MHz
 
-#define FW_VER		0x04
+#define FW_VER			0x04
+#define DEVICE_VID		0x2886UL
+#define DEVICE_PID		0x0006
 
 // IN[1:4] = PD[4:7]
 #define MOTOR_DDR  DDRD
@@ -70,27 +72,47 @@
 
 enum {
 	#define _REG_WIDTH	2
-	REG_GET_VER		= 0x01,
+	REG_GET_PID		= 0x00,
+	REG_GET_VID,
+	REG_GET_VER,
 	REG_STP_EN		= 0x1A,
 	REG_STP_DIS,
 	REG_STP_RUN,
+	REG_STP_INTERVAL,	// Interval between two pulses
+				// unit 10us
+
+	// Advanced stepper {
+	REG_SEQ_LEN		= 0x20,
+	// Read  SEQ_LEN will reset sequence reading  iterator
+	// Write SEQ_LEN will reset sequence writting iterator
+	// SEQ_GET return   item at position of reading  iterator
+	// SEQ_SET will set item at position of writting iterator
+	REG_SEQ_XET,		// Get or Set
+	// } Advanced stepper
+
+	// DC motor {
 	REG_SET_SPEED		= 0x82,
 	REG_SET_FREQ		= 0x84,
 	REG_SET_A		= 0xA1,
 	REG_SET_B		= 0xA5,
 	REG_SET_DIR		= 0xAA,
+	// } DC motor
 };
 
 #define _STEP_DIR_CLKWISE	1
 #define _STEP_DIR_ANTICLK	0
 uint8_t step_dir = _STEP_DIR_CLKWISE;
-uint16_t step_speed = 100;
-uint16_t pulse_cnt = 255;
+uint16_t step_interval = 0;
+// Compatibility, step-timer ticks to generate a pulse
+uint8_t step_speed = 100UL;
+volatile uint16_t pulse_cnt = 255UL;
 
 // stepper sequences
-#define _MAX_SEQ_SZ	128
-int seq_size = 0;
-int seq_index = 0;
+#define _MAX_SEQ_SZ	128UL
+int8_t seq_size = 0;
+int8_t seq_index = -1;
+int8_t seq_w_iter = 0;
+int8_t seq_r_iter = 0;
 uint8_t seq_list[_MAX_SEQ_SZ];
 
 // default _SEQ_4PHASE_28BYJ48 sequences
@@ -109,13 +131,13 @@ const uint8_t _SEQ_4PHASE_28BYJ48[] = {
 #define _LED_DBG                0
 
 #if _LED_DBG
-int dummy;
+int dummy_port;
 #endif
 int led_debug(int led) {
 	#if _LED_DBG
 	MOTOR_PORT = (led & 0xF) << 4;
 	#undef  MOTOR_PORT
-	#define MOTOR_PORT dummy
+	#define MOTOR_PORT dummy_port
 	#endif
 	return 0;
 }
@@ -136,8 +158,9 @@ int stepper_init(void) {
 	return 0;
 }
 
-#define STEP_PLUSE_PERIOD_4MS_CYCLES   0x100
-#define STEP_PLUSE_PERIOD_112US_CYCLES 0x7
+#define STEP_PULSE_PERIOD_4MS_CYCLES   0x100
+#define STEP_PULSE_PERIOD_400US_CYCLES 100
+int step_cycles = STEP_PULSE_PERIOD_4MS_CYCLES;
 void steptimer_open(int cycles) {
 	uint8_t sreg;
 
@@ -172,24 +195,38 @@ void steptimer_open(int cycles) {
 	// In CTC operation the Timer/Counter Overflow Flag(TOV2) will be
 	// set in the same timer clock cycle as the TCNT2 becomes zero.
 	//
+	//
+	// ### PULSE_4MS ###
 	// CLKt2 = CLKt2s / 128 = 62.5KHz
 	//
 	// with cycles = 0x100,
 	// Timer2 Frequency = 62.5KHz / 0x100 = 244.14 Hz
 	//        Period    = 4.096 ms
 	//
-	// with cycles = 0x7
-	// Timer2 Frequency = 62.5KHz / 7     = 8928.57 Hz
-	//        Period    = 0.112 ms
+	// ### PULSE_400US ###
+	// CLKt2 = CLKt2s / 32   = 250KHz
+	// with cycles = 100
+	// Timer2 Frequency = 250KHz / 100     = 2500 Hz
+	//        Period    = 0.4 ms
 	OCR2  = cycles - 1;
-	TCCR2 = 0x0D;
+	if (cycles == STEP_PULSE_PERIOD_4MS_CYCLES) {
+		TCCR2 = _BV(WGM21) | (_BV(CS22) | _BV(CS20));
+	} else {
+		TCCR2 = _BV(WGM21) | (_BV(CS21) | _BV(CS20));
+	}
 
 	// Enable Timer2 Compare interrupt
 	TIMSK |= 1 << (OCIE2);
 	TCNT2 = 0;
 
 	// reset sequence index
-	seq_index = 0;
+	if (seq_index < 0) {
+		if (step_dir == _STEP_DIR_CLKWISE) {
+			seq_index = 0;
+		} else if (step_dir == _STEP_DIR_ANTICLK) {
+			seq_index = seq_size;
+		}
+	}
 
 	/* Restore Global Interrupt Flag */
 	SREG = sreg;
@@ -219,7 +256,7 @@ void steptimer_close(void) {
 // Stride Angle: 5.625 degrees / 64
 // Speed Variation Ratio = 64
 // So 1 pluse = 0.08789 degree
-void stepper_single_pulse(void) {
+inline void stepper_single_pulse(void) {
 	MOTOR_PORT = seq_list[seq_index];
 
 	if (step_dir == _STEP_DIR_CLKWISE && ++seq_index >= seq_size) {
@@ -233,29 +270,38 @@ void stepper_single_pulse(void) {
 }
 
 // be called in timer ISR
-int steptimer_callback(void) {
-	static volatile int isr_counter = 0;
-
-	if (pulse_cnt == 0) {
-		isr_counter = 0;
-		return -1;
-	}
-
-	// control the pulse speed
-	if (++isr_counter < step_speed) {
-		return -1;
-	}
-	isr_counter = 0;
-
-	pulse_cnt --;
-	stepper_single_pulse();
-
-	return 0;
-}
+static volatile uint8_t stp_isr_counter = 0;
+#if 0
+void steptimer_callback(void);
 
 ISR(TIMER2_COMP_vect)
 {
 	steptimer_callback();
+}
+
+void steptimer_callback(void) {
+#else
+ISR(TIMER2_COMP_vect) {
+#endif
+	// ***************************************
+	// ****** Interrupt nesting allowed ******
+	// ***************************************
+	sei();
+
+	if (pulse_cnt == 0) {
+		return;
+	}
+
+	// control the pulse speed by isr_counter
+	if (++stp_isr_counter < step_speed) {
+		return;
+	}
+	stp_isr_counter = 0;
+
+	pulse_cnt --;
+	stepper_single_pulse();
+
+	return;
 }
 
 // initialise Timer/Counter1 to Phase Correct PWM Mode
@@ -360,7 +406,7 @@ void pwm_set_duty(uint8_t dutya, uint8_t dutyb) {
 }
 
 // define pins
-void pin_init(void)	 {
+void pin_init(void) {
 	// bit set --- output
 	MOTOR_DDR  = 0xF0;		// I1,I2,I3,I4 outputs
 	MOTOR_PORT = 0xF0;
@@ -370,7 +416,7 @@ void pin_init(void)	 {
 
 void i2c_init(void) {
 	I2C_ADDR_DDR  = 0x40;		// All pins input
-	I2C_ADDR_PORT = 0x0F;
+	I2C_ADDR_PORT = 0x0F;		// PC0 - PC3 enable pullup
 	TWI_Slave_Initialise((~I2C_ADDR_PIN & 0x0F) << 1);
 	return;
 }
@@ -378,6 +424,7 @@ void i2c_init(void) {
 static uint8_t tx_buff[_REG_WIDTH + 2];
 static uint8_t rx_buff[_REG_WIDTH + 2];
 static int new_packet = FALSE;
+static uint16_t dummy;
 
 int TWI_Recv_Callback(uint8_t* buff, int bytes) {
 	// i2c read
@@ -385,16 +432,47 @@ int TWI_Recv_Callback(uint8_t* buff, int bytes) {
 		tx_buff[1] = '\0';
 
 		switch(buff[0]) {
+		case REG_GET_PID:
+			dummy = DEVICE_PID;
+			memcpy(tx_buff, &dummy, _REG_WIDTH);
+			break;
+
+		case REG_GET_VID:
+			dummy = DEVICE_VID;
+			memcpy(tx_buff, &dummy, _REG_WIDTH);
+			break;
+
 		case REG_GET_VER:
 			tx_buff[0] = FW_VER;
 			break;
+
 		case REG_STP_EN:
 			tx_buff[0] = step_dir;
 			tx_buff[1] = step_speed;
 			break;
+
 		case REG_STP_RUN:
-			memcpy(tx_buff, &pulse_cnt, sizeof pulse_cnt);
+			memcpy(tx_buff, (uint8_t*)&pulse_cnt, _REG_WIDTH);
 			break;
+
+		case REG_STP_INTERVAL:
+			memcpy(tx_buff, &step_interval, _REG_WIDTH);
+			break;
+
+		case REG_SEQ_LEN:
+			tx_buff[0] = seq_size;
+			seq_r_iter = 0;
+			break;
+
+		case REG_SEQ_XET:
+			if (seq_r_iter < seq_size) {
+				tx_buff[0] = seq_list[seq_r_iter++] >> 4;
+			} else {
+				tx_buff[0] = 0;
+				tx_buff[1] = 1;
+			}
+			break;
+
 		default:
 			tx_buff[0] = '\0';
 			break;
@@ -423,7 +501,6 @@ int main(void) {
 	// CLKi/o = F_CPU     = 8MHz
 	// CLKt1  = 8MHz / 64 = 125KHz
 	pwm_init(_PRESCALER_64);
-
 	// pwm_set_duty(127,127);
 	// 50% duty
 
@@ -441,7 +518,11 @@ int main(void) {
 			TWI_Start_Transceiver_With_Data(tx_buff, _REG_WIDTH);;
 		}
 
-		wdt_reset();	// Reset WDT while PB4 are pulled low
+		if (pulse_cnt == 0) {
+			stp_isr_counter = 0;
+		}
+
+		wdt_reset();	// Reset WDT
 
 		// Interrupt driven
 		if (new_packet) {
@@ -479,7 +560,6 @@ int main(void) {
 			MOTOR_PORT = (rx_buff[1] & 0x0F) << 4;
 			break;
 
-
 		/***************************************************************
 		 *  stepper interfaces                                         *
 		 ***************************************************************/
@@ -487,9 +567,16 @@ int main(void) {
 		case REG_STP_EN:
 			steptimer_close();
 			step_dir   = rx_buff[1];
-			step_speed = rx_buff[2];
+			if (step_interval) {
+				// uint trans: 10 us -> 400 us
+				step_speed = step_interval / 40;
+			} else {
+				step_speed = rx_buff[2];
+			}
+			// make sure ticks non-zero.
+			if (step_speed == 0) step_speed++;
 
-			steptimer_open(STEP_PLUSE_PERIOD_4MS_CYCLES);
+			steptimer_open(step_cycles);
 			pwm_set_duty(255, 255);
 			break;
 
@@ -500,7 +587,34 @@ int main(void) {
 
 		// set the steps count
 		case REG_STP_RUN:
-			memcpy(&pulse_cnt, &rx_buff[1], sizeof pulse_cnt);
+			memcpy((uint8_t*)&pulse_cnt, &rx_buff[1], sizeof pulse_cnt);
+			break;
+
+		// set the step interval
+		case REG_STP_INTERVAL:
+			memcpy(&step_interval, &rx_buff[1], sizeof step_interval);
+			if (step_interval) {
+				step_cycles = STEP_PULSE_PERIOD_400US_CYCLES;
+			} else {
+				step_cycles = STEP_PULSE_PERIOD_4MS_CYCLES;
+			}
+			break;
+
+		/***************************************************************
+		 *  sequence interfaces                                        *
+		 ***************************************************************/
+		case REG_SEQ_LEN:
+			memcpy(&seq_size, &rx_buff[1], sizeof seq_size);
+			if (seq_size > _MAX_SEQ_SZ) {
+				seq_size = _MAX_SEQ_SZ;
+			}
+			seq_w_iter = 0;
+			break;
+
+		case REG_SEQ_XET:
+			if (seq_w_iter < seq_size) {
+				seq_list[seq_w_iter++] = (rx_buff[1] & 0x0F) << 4;
+			}
 			break;
 
 		default:
