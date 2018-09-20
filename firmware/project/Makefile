@@ -16,7 +16,7 @@ COMMON = -mmcu=$(MCU)
 ## Compile options common for all C compilation units.
 CFLAGS = $(COMMON)
 CFLAGS += -Wall -gdwarf-2 -std=gnu99 -DF_CPU=8000000UL -Os -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums
-CFLAGS += -MD -MP -MT $(*F).o -MF dep/$(@F).d 
+CFLAGS += -MD -MP -MT $(*F).o -MF dep/$(@F).d -o $@
 
 ## Assembly specific flags
 ASMFLAGS = $(COMMON)
@@ -37,7 +37,7 @@ HEX_EEPROM_FLAGS += --change-section-lma .eeprom=0 --no-change-warnings
 
 
 ## Objects that must be built in order to link
-OBJECTS = main.o twi-slave.o 
+OBJECTS = main.o twi.o Wire.o
 
 ## Objects explicitly added by the user
 LINKONLYOBJECTS = 
@@ -49,7 +49,10 @@ all: $(TARGET) mega8motor.hex mega8motor.eep mega8motor.lss size
 main.o: ./main.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
-twi-slave.o: ./twi-slave.c
+twi.o: ./twi.c
+	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
+
+Wire.o: ./Wire.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 ##Link

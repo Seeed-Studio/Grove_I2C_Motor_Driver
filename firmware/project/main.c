@@ -35,7 +35,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <util/delay.h>
-#include "twi-slave.h"
+#include "Wire.h"
+#include "twi.h"
 
 // =============== FUSE SETTING ================================================
 // FUSE HIGH: 0xD9 (0b1101 1001)
@@ -97,6 +98,7 @@ enum {
 	REG_SET_B		= 0xA5,
 	REG_SET_DIR		= 0xAA,
 	// } DC motor
+	REG_GET_BYTES	= 0xF0,
 };
 
 #define _STEP_DIR_CLKWISE	1
@@ -126,6 +128,10 @@ const uint8_t _SEQ_4PHASE_28BYJ48[] = {
 	0x80,		// 0b1000
 	0x90,		// 0b1001
 };
+
+void receiveEvent(int howMany);
+void requestEvent(void);
+
 
 // debug using LED status for indication
 #define _LED_DBG                0
@@ -159,10 +165,13 @@ int stepper_init(void) {
 }
 
 #define STEP_PULSE_PERIOD_4MS_CYCLES   0x100
-#define STEP_PULSE_PERIOD_400US_CYCLES 100
+#define STEP_PULSE_PERIOD_x00US_CYCLES 100
 int step_cycles = STEP_PULSE_PERIOD_4MS_CYCLES;
 void steptimer_open(int cycles) {
 	uint8_t sreg;
+#define STEP_PULSE_PERIOD_x00_100US			1
+#define STEP_PULSE_PERIOD_x00_400US			2
+#define STEP_PULSE_PERIOD_x00				STEP_PULSE_PERIOD_x00_100US
 
 	/*
 	 * Save Global Interrupt Flag
@@ -204,15 +213,27 @@ void steptimer_open(int cycles) {
 	//        Period    = 4.096 ms
 	//
 	// ### PULSE_400US ###
-	// CLKt2 = CLKt2s / 32   = 250KHz
+	// CLKt2 = CLKt2s / 32   = 250 KHz
 	// with cycles = 100
-	// Timer2 Frequency = 250KHz / 100     = 2500 Hz
+	// Timer2 Frequency = 250 KHz / 100     = 2500 Hz
 	//        Period    = 0.4 ms
+	//
+	// ### PULSE_100US ###
+	// CLKt2 = CLKt2s /  8   = 1000 KHz
+	// with cycles = 100
+	// Timer2 Frequency = 1000KHz / 100     = 10 KHz
+	//        Period    = 0.1 ms
 	OCR2  = cycles - 1;
 	if (cycles == STEP_PULSE_PERIOD_4MS_CYCLES) {
 		TCCR2 = _BV(WGM21) | (_BV(CS22) | _BV(CS20));
 	} else {
+		#if STEP_PULSE_PERIOD_x00 == STEP_PULSE_PERIOD_x00_100US
+		TCCR2 = _BV(WGM21) | (_BV(CS21));
+		#elif STEP_PULSE_PERIOD_x00 == STEP_PULSE_PERIOD_x00_400US
 		TCCR2 = _BV(WGM21) | (_BV(CS21) | _BV(CS20));
+		#else
+		#error STEP_PULSE_PERIOD_x00
+		#endif
 	}
 
 	// Enable Timer2 Compare interrupt
@@ -417,21 +438,37 @@ void pin_init(void) {
 void i2c_init(void) {
 	I2C_ADDR_DDR  = 0x40;		// All pins input
 	I2C_ADDR_PORT = 0x0F;		// PC0 - PC3 enable pullup
-	TWI_Slave_Initialise((~I2C_ADDR_PIN & 0x0F) << 1);
+
+	begin(~I2C_ADDR_PIN & 0x0F);
+	onReceive(receiveEvent);
+	onRequest(requestEvent);
 	return;
 }
 
 static uint8_t tx_buff[_REG_WIDTH + 2];
 static uint8_t rx_buff[_REG_WIDTH + 2];
-static int new_packet = FALSE;
+static volatile int new_packet = FALSE;
+static volatile int last_bytes = 0;
 static uint16_t dummy;
 
-int TWI_Recv_Callback(uint8_t* buff, int bytes) {
+void receiveEvent(int bytes) {
+	uint8_t v, i;
+
+	i = 0;
+	while (available()) {
+		v = twi_read();
+		if (i >= sizeof rx_buff) {
+			continue;
+		}
+		rx_buff[i++] = v;
+	}
+	bytes = i;
+
 	// i2c read
 	if (bytes == 1) {
 		tx_buff[1] = '\0';
 
-		switch(buff[0]) {
+		switch(rx_buff[0]) {
 		case REG_GET_PID:
 			dummy = DEVICE_PID;
 			memcpy(tx_buff, &dummy, _REG_WIDTH);
@@ -473,27 +510,37 @@ int TWI_Recv_Callback(uint8_t* buff, int bytes) {
 			}
 			break;
 
+		case REG_GET_BYTES:
+			memcpy(tx_buff, (uint8_t*)&last_bytes, _REG_WIDTH);
+			break;
+
 		default:
 			tx_buff[0] = '\0';
 			break;
 		}
-		TWI_Send_Data(tx_buff, _REG_WIDTH);
-		return 0;
+		return;
 	}
+
+	last_bytes = bytes;
 
 	// i2c write
 	if (bytes == _REG_WIDTH + 1) {
-		memcpy(rx_buff, buff, bytes);
 		new_packet = TRUE;
-		return 0;
+		return;
 	}
 
 	// skip bad packet
-	return -1;
+	return;
+}
+
+void requestEvent(void) {
+	twi_writes(tx_buff, _REG_WIDTH);
+	return;
 }
 
 int main(void) {
 	uint8_t pinBuf;
+	uint8_t pulse_zero;
 
 	pin_init();
 
@@ -514,12 +561,16 @@ int main(void) {
 	sei();
 
 	while (1) {
-		if (! TWI_Transceiver_Busy()) {
-			TWI_Start_Transceiver_With_Data(tx_buff, _REG_WIDTH);;
-		}
+		// none-8bit values (pulse_cnt) show be protected
+		cli();
+		pulse_zero = pulse_cnt == 0;
+		sei();
 
-		if (pulse_cnt == 0) {
+		if (pulse_zero) {
 			stp_isr_counter = 0;
+
+			// Disable Timer2 Compare interrupt
+			TIMSK &= ~(1 << OCIE2);
 		}
 
 		wdt_reset();	// Reset WDT
@@ -568,8 +619,12 @@ int main(void) {
 			steptimer_close();
 			step_dir   = rx_buff[1];
 			if (step_interval) {
-				// uint trans: 10 us -> 400 us
+				// uint trans: 10 us -> x00 us
+				#if STEP_PULSE_PERIOD_x00 == STEP_PULSE_PERIOD_x00_100US
+				step_speed = step_interval / 10;
+				#elif STEP_PULSE_PERIOD_x00 == STEP_PULSE_PERIOD_x00_400US
 				step_speed = step_interval / 40;
+				#endif
 			} else {
 				step_speed = rx_buff[2];
 			}
@@ -594,7 +649,7 @@ int main(void) {
 		case REG_STP_INTERVAL:
 			memcpy(&step_interval, &rx_buff[1], sizeof step_interval);
 			if (step_interval) {
-				step_cycles = STEP_PULSE_PERIOD_400US_CYCLES;
+				step_cycles = STEP_PULSE_PERIOD_x00US_CYCLES;
 			} else {
 				step_cycles = STEP_PULSE_PERIOD_4MS_CYCLES;
 			}
