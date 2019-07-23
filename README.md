@@ -10,10 +10,12 @@ This is an Arduino example for [Grove - I2C Motor Driver](http://www.seeedstudio
 ## Firmware update
 
 Users who got this motor driver can use AVR ISP programmer mkII to burn the new firmware at 
-"firmware/images/mega8motor_v3.hex"
+"firmware/images/mega8motor_v4.hex"
 
 ### Changelogs: 
-mega8motor_v3.hex: fixed i2cdetect block on raspberry pi
+- mega8motor_v3.hex: fixed i2cdetect block on raspberry pi
+- mega8motor_v4.hex: Use arduino Wire as I2C library.
+
 
 ### Update using AVR ISP programmer mkII
 Tools to prepare:
@@ -22,7 +24,7 @@ Tools to prepare:
 
 Upload firmware Command:
 ```
-avrdude -p m8 -c avrisp2 -P usb -U flash:w:mega8motor_v3.hex
+avrdude -p m8 -c avrisp2 -P usb -U flash:w:mega8motor_v4.hex
 ```
 
 ### Update using Arduino Uno (Genuino Uno)
@@ -77,7 +79,7 @@ Steps under Windows:
 	</table>
 </div>
 
-4. Place mega8motor_v3.hex into Arduino IDE installation directory
+4. Place mega8motor_v4.hex into Arduino IDE installation directory
 (F:\TaryInst\Arduino for example, change to your specific directory)
 
 5. Open Windows [Command Prompt](https://www.lifewire.com/how-to-open-command-prompt-2618089), then
@@ -87,7 +89,7 @@ enter below commands to start the update (change the path F:\TaryInst\Arduino to
 CD /D F:\TaryInst\Arduino
 SET AVRDUDE=hardware\tools\avr\bin\avrdude.exe
 SET DUDECONF=hardware\tools\avr\etc\avrdude.conf
-%AVRDUDE% -C %DUDECONF% -p m8 -c stk500v1 -PCOM24 -b19200 -U flash:w:mega8motor_v3.hex
+%AVRDUDE% -C %DUDECONF% -p m8 -c stk500v1 -PCOM24 -b19200 -U flash:w:mega8motor_v4.hex
 %AVRDUDE% -C %DUDECONF% -p m8 -c stk500v1 -PCOM24 -b19200 -U hfuse:w:0xD9:m -U lfuse:w:0xD4:m
 ```
 
